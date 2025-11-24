@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>GoTail Configurable</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #f8f8f2;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            margin: 0;
+            padding-top: 60px; /* Espacio para el header fijo */
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        /* HEADER FIJO */
+        #header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 50px;
+            background: #282a36;
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            box-sizing: border-box;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        .brand {
+            color: #50fa7b;
+            font-weight: bold;
+            font-size: 18px;
+            margin-right: 20px;
+        }
+
+        /* CONTROLES */
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-grow: 1;
+        }
+
+        input#search {
+            background: #44475a;
+            border: 1px solid #6272a4;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            width: 300px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        input#search::placeholder { color: #aaa; }
+
+        button {
+            background: #6272a4;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover { background: #bd93f9; color: #282a36; }
+        
+        button#pause-btn.paused {
+            background: #ff5555;
+            animation: pulse 1.5s infinite;
+        }
+
+        #status {
+            margin-left: auto;
+            font-size: 12px;
+            padding-right: 30px;
+        }
+
+        /* LOG CONTAINER */
+        #log-container {
+            padding: 10px 15px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .log-line {
+            padding: 3px 0;
+            border-bottom: 1px solid #252525;
+            display: flex;
+            align-items: flex-start; /* Alineación superior por si la línea es larga */
+        }
+        
+        .log-line:hover { background-color: #44475a; }
+        .log-line.hidden { display: none; }
+
+        /* PUNTOS DE ESTADO (DOTS) */
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 12px;
+            margin-top: 5px; /* Ajuste óptico con el texto */
+            flex-shrink: 0;
+            display: inline-block;
+        }
+
+        /* Colores Neon estilo Dracula Theme */
+        .dot.red { background: #ff5555; box-shadow: 0 0 8px #ff5555; }
+        .dot.green { background: #50fa7b; box-shadow: 0 0 8px #50fa7b; }
+        .dot.amber { background: #f1fa8c; box-shadow: 0 0 8px #f1fa8c; }
+        .dot.blue { background: #8be9fd; box-shadow: 0 0 8px #8be9fd; }
+        .dot.purple { background: #bd93f9; box-shadow: 0 0 8px #bd93f9; }
+        .dot.none { display: none; }
+
+        /* Animación de Pausa */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <span class="brand">GoTail</span>
+        <div class="controls">
+            <input type="text" id="search" placeholder="Filtrar logs... (Escribe para filtrar)">
+            <button id="pause-btn" onclick="togglePause()">Pausa</button>
+            <button onclick="clearLogs()">Limpiar</button>
+        </div>
+        <span id="status">Conectando...</span>
+    </div>
+
+    <div id="log-container"></div>
+
+    <script>
+        // =========================================================
+        // 1. CONFIGURACIÓN E INICIALIZACIÓN
+        // =========================================================
+        
+        // Recibimos el JSON inyectado desde Go
+        const rawConfig = {{.ConfigJSON}} || [];
+
+        // Pre-procesamos las reglas: Compilamos las Regex una sola vez al inicio
+        // para no gastar recursos haciéndolo en cada línea que llega.
+        const configRules = rawConfig.map(rule => {
+            if (rule.use_regex) {
+                try {
+                    // Creamos el objeto RegExp. 'i' hace que no distinga mayúsculas/minúsculas
+                    return { ...rule, regexObj: new RegExp(rule.keyword, 'i') };
+                } catch (e) {
+                    console.error("❌ Regex inválido en config.json:", rule.keyword, e);
+                    // Si falla el regex, lo marcamos para usar búsqueda normal de texto
+                    return { ...rule, use_regex: false };
+                }
+            }
+            return rule;
+        });
+
+        const container = document.getElementById('log-container');
+        const statusSpan = document.getElementById('status');
+        const searchInput = document.getElementById('search');
+        const pauseBtn = document.getElementById('pause-btn');
+
+        let isPaused = false;
+        let filterText = "";
+
+        // =========================================================
+        // 2. WEBSOCKET SETUP
+        // =========================================================
+        const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsUrl = `${proto}://${window.location.host}/ws`;
+        let ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            statusSpan.innerHTML = "🟢 <span style='color:#50fa7b'>En vivo</span>";
+        };
+
+        ws.onclose = () => {
+            statusSpan.innerHTML = "🔴 <span style='color:#ff5555'>Desconectado</span>";
+        };
+
+        ws.onmessage = (event) => {
+            appendLogLine(event.data);
+        };
+
+        // =========================================================
+        // 3. LÓGICA DE VISUALIZACIÓN
+        // =========================================================
+        function appendLogLine(text) {
+            const div = document.createElement('div');
+            div.className = 'log-line';
+            
+            let appliedColor = '';
+            let appliedDot = 'none';
+
+            // Comprobar reglas de configuración
+            for (const rule of configRules) {
+                let match = false;
+
+                if (rule.use_regex && rule.regexObj) {
+                    // Opción A: Usar Regex compilado (.test es rápido)
+                    match = rule.regexObj.test(text);
+                } else {
+                    // Opción B: Búsqueda simple de texto
+                    match = text.includes(rule.keyword);
+                }
+
+                if (match) {
+                    if (rule.color) appliedColor = rule.color;
+                    if (rule.dot) appliedDot = rule.dot;
+                    // Rompemos el bucle al encontrar la primera coincidencia 
+                    // (prioridad según orden en JSON)
+                    break;
+                }
+            }
+
+            // Crear el punto (dot)
+            const dotSpan = document.createElement('span');
+            dotSpan.className = `dot ${appliedDot}`;
+            
+            // Crear el texto del log
+            const textSpan = document.createElement('span');
+            textSpan.textContent = text;
+            if (appliedColor) {
+                textSpan.style.color = appliedColor;
+            }
+
+            div.appendChild(dotSpan);
+            div.appendChild(textSpan);
+
+            // Aplicar filtro si el usuario escribió algo en el buscador
+            if (filterText && !text.toLowerCase().includes(filterText)) {
+                div.classList.add('hidden');
+            }
+
+            container.appendChild(div);
+
+            // Auto-scroll si no está pausado
+            if (!isPaused) {
+                window.scrollTo(0, document.body.scrollHeight);
+            }
+        }
+
+        // =========================================================
+        // 4. CONTROLES DE USUARIO
+        // =========================================================
+        function togglePause() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                pauseBtn.textContent = "REANUDAR";
+                pauseBtn.classList.add("paused");
+            } else {
+                pauseBtn.textContent = "Pausa";
+                pauseBtn.classList.remove("paused");
+                // Al reanudar, bajar al final inmediatamente
+                window.scrollTo(0, document.body.scrollHeight);
+            }
+        }
+
+        function clearLogs() {
+            container.innerHTML = '';
+        }
+
+        // Filtro local en tiempo real
+        searchInput.addEventListener('keyup', (e) => {
+            filterText = e.target.value.toLowerCase();
+            const lines = document.querySelectorAll('.log-line');
+            
+            lines.forEach(line => {
+                // Buscamos solo en el texto, no en el HTML del dot
+                const textContent = line.textContent.toLowerCase();
+                if (textContent.includes(filterText)) {
+                    line.classList.remove('hidden');
+                } else {
+                    line.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

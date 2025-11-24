@@ -1,0 +1,7 @@
+[
+  { "keyword": " 500 ", "color": "#ff5555", "dot": "red", "use_regex": false },
+  { "keyword": " 404 ", "color": "#ffb86c", "dot": "amber", "use_regex": false },
+  { "keyword": " 200 ", "color": "#50fa7b", "dot": "green", "use_regex": false },
+  { "keyword": "\"(GET|POST|PUT|DELETE)", "color": "#8be9fd", "dot": "blue", "use_regex": true },
+  { "keyword": "^[0-9\\.]+", "color": "#6272a4", "dot": "none", "use_regex": true }
+]
