@@ -1,6 +1,34 @@
 [
-  { "keyword": "panic|fail", "color": "#ff5555", "dot": "red", "use_regex": true },
-  { "keyword": "opened file", "color": "#50fa7b", "dot": "green", "use_regex": false },
-  { "keyword": "closed file", "color": "#6272a4", "dot": "none", "use_regex": false },
-  { "keyword": "connect to service", "color": "#8be9fd", "dot": "blue", "use_regex": false }
+  { 
+    "keyword": "panic|fail", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": true,
+    "label": "SMB Panic",
+    "blink": true
+  },
+  { 
+    "keyword": "opened file", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": false,
+    "label": "File Open",
+    "blink": false
+  },
+  { 
+    "keyword": "closed file", 
+    "color": "#6272a4", 
+    "dot": "none", 
+    "use_regex": false,
+    "label": "File Close",
+    "blink": false
+  },
+  { 
+    "keyword": "connect to service", 
+    "color": "#8be9fd", 
+    "dot": "blue", 
+    "use_regex": false,
+    "label": "New Conn",
+    "blink": false
+  }
 ]

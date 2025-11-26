@@ -1,0 +1,42 @@
+[
+  { 
+    "keyword": "failed|refused|bad address", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": true, 
+    "label": "Error/Refused", 
+    "blink": true 
+  },
+  { 
+    "keyword": "DHCPACK", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": false, 
+    "label": "DHCP Lease", 
+    "blink": false 
+  },
+  { 
+    "keyword": "query\\[A\\]|query\\[AAAA\\]", 
+    "color": "#8be9fd", 
+    "dot": "blue", 
+    "use_regex": true, 
+    "label": "DNS Query", 
+    "blink": false 
+  },
+  { 
+    "keyword": "config error", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": false, 
+    "label": "Config Err", 
+    "blink": true 
+  },
+  { 
+    "keyword": "cached", 
+    "color": "#f1fa8c", 
+    "dot": "none", 
+    "use_regex": false, 
+    "label": "Cache Hit", 
+    "blink": false 
+  }
+]

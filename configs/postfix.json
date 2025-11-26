@@ -1,0 +1,34 @@
+[
+  { 
+    "keyword": "status=bounced", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": false, 
+    "label": "Bounced", 
+    "blink": true 
+  },
+  { 
+    "keyword": "status=deferred", 
+    "color": "#f1fa8c", 
+    "dot": "amber", 
+    "use_regex": false, 
+    "label": "Deferred", 
+    "blink": false 
+  },
+  { 
+    "keyword": "status=sent", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": false, 
+    "label": "Sent", 
+    "blink": false 
+  },
+  { 
+    "keyword": "connection timed out", 
+    "color": "#ffb86c", 
+    "dot": "purple", 
+    "use_regex": false, 
+    "label": "Timeout", 
+    "blink": false 
+  }
+]

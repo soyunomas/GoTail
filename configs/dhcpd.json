@@ -1,0 +1,42 @@
+[
+  { 
+    "keyword": "no free leases|Not configured to listen", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": true, 
+    "label": "CRITICAL", 
+    "blink": true 
+  },
+  { 
+    "keyword": "DHCPNAK", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": false, 
+    "label": "Rejected (NAK)", 
+    "blink": true 
+  },
+  { 
+    "keyword": "DHCPACK", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": false, 
+    "label": "Assigned (ACK)", 
+    "blink": false 
+  },
+  { 
+    "keyword": "DHCPDISCOVER", 
+    "color": "#6272a4", 
+    "dot": "none", 
+    "use_regex": false, 
+    "label": "Discover", 
+    "blink": false 
+  },
+  { 
+    "keyword": "DHCPREQUEST", 
+    "color": "#8be9fd", 
+    "dot": "blue", 
+    "use_regex": false, 
+    "label": "Request", 
+    "blink": false 
+  }
+]

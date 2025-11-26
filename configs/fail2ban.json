@@ -1,0 +1,34 @@
+[
+  { 
+    "keyword": "\\] Ban ", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": true, 
+    "label": "BANNED IP", 
+    "blink": true 
+  },
+  { 
+    "keyword": "\\] Unban ", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": true, 
+    "label": "Unban", 
+    "blink": false 
+  },
+  { 
+    "keyword": "\\] Found ", 
+    "color": "#f1fa8c", 
+    "dot": "amber", 
+    "use_regex": true, 
+    "label": "Threat Found", 
+    "blink": false 
+  },
+  { 
+    "keyword": "Already banned", 
+    "color": "#6272a4", 
+    "dot": "purple", 
+    "use_regex": false, 
+    "label": "Repeat", 
+    "blink": false 
+  }
+]

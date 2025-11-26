@@ -1,6 +1,34 @@
 [
-  { "keyword": "UFW BLOCK", "color": "#ff5555", "dot": "red", "use_regex": false },
-  { "keyword": "UFW ALLOW", "color": "#50fa7b", "dot": "green", "use_regex": false },
-  { "keyword": "SRC=[0-9\\.]+", "color": "#f1fa8c", "dot": "amber", "use_regex": true },
-  { "keyword": "DPT=22", "color": "#bd93f9", "dot": "purple", "use_regex": false }
+  { 
+    "keyword": "UFW BLOCK", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": false,
+    "label": "Blocked",
+    "blink": true
+  },
+  { 
+    "keyword": "UFW ALLOW", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": false,
+    "label": "Allowed",
+    "blink": false
+  },
+  { 
+    "keyword": "SRC=[0-9\\.]+", 
+    "color": "#f1fa8c", 
+    "dot": "amber", 
+    "use_regex": true,
+    "label": "Source IP",
+    "blink": false
+  },
+  { 
+    "keyword": "DPT=22", 
+    "color": "#bd93f9", 
+    "dot": "purple", 
+    "use_regex": false,
+    "label": "SSH Port",
+    "blink": false
+  }
 ]

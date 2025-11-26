@@ -1,0 +1,34 @@
+[
+  { 
+    "keyword": "PANIC|FATAL", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": true, 
+    "label": "DB Crash", 
+    "blink": true 
+  },
+  { 
+    "keyword": "ERROR", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": false, 
+    "label": "Query Error", 
+    "blink": false 
+  },
+  { 
+    "keyword": "duration: [1-9][0-9]{3,}", 
+    "color": "#ffb86c", 
+    "dot": "amber", 
+    "use_regex": true, 
+    "label": "Slow Query", 
+    "blink": false 
+  },
+  { 
+    "keyword": "LOG:", 
+    "color": "#8be9fd", 
+    "dot": "blue", 
+    "use_regex": false, 
+    "label": "Info", 
+    "blink": false 
+  }
+]

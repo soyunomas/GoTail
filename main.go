@@ -2,7 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,122 +16,352 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/nxadm/tail"
 )
 
-//go:embed index.html
+//go:embed index.html login.html
 var content embed.FS
 
-// Estructura para la configuración de colores
+// --- ESTRUCTURAS DE CONFIGURACIÓN ---
+
+type GlobalConfig struct {
+	ServerPassword string           `json:"server_password"`
+	Logs           []LogEntryConfig `json:"logs"`
+}
+
+type LogEntryConfig struct {
+	Path    string `json:"path"`
+	Profile string `json:"profile"`
+	Name    string `json:"name"`
+}
+
 type HighlightRule struct {
 	Keyword  string `json:"keyword"`
 	Color    string `json:"color"`
 	Dot      string `json:"dot"`
 	UseRegex bool   `json:"use_regex"`
+	Label    string `json:"label,omitempty"`
+	Blink    bool   `json:"blink,omitempty"`
+    AlertMsg string `json:"alert_msg,omitempty"`
 }
 
-// Estructura para pasar datos al HTML
-type PageData struct {
-	ConfigJSON template.JS
+type FrontendLogData struct {
+	Index int             `json:"index"`
+	Name  string          `json:"name"`
+	Rules []HighlightRule `json:"rules"`
 }
+
+type WebSocketMessage struct {
+	LogIndex int    `json:"log_index"`
+	Text     string `json:"text"`
+}
+
+type PageData struct {
+	DashboardJSON template.JS
+}
+
+type LoginData struct {
+	Error bool
+}
+
+// --- GLOBALES ---
 
 var (
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
-	loadedConfig []HighlightRule
+	loadedProfiles = make(map[string][]HighlightRule)
+
+	currentConfig  GlobalConfig
+	serverPassHash string
 )
 
 type Hub struct {
 	clients   map[*websocket.Conn]bool
-	broadcast chan string
-	history   []string
+	broadcast chan WebSocketMessage
+	history   map[int][]string
 	mutex     sync.Mutex
 }
 
 var hub = Hub{
 	clients:   make(map[*websocket.Conn]bool),
-	broadcast: make(chan string),
-	history:   make([]string, 0),
+	broadcast: make(chan WebSocketMessage),
+	history:   make(map[int][]string),
 }
 
-const HISTORY_SIZE = 50
+const (
+	HISTORY_SIZE = 50
+	COOKIE_NAME  = "gotail_session"
+)
+
+// --- MAIN ---
 
 func main() {
-	// Definición de flags (parámetros)
-	filePath := flag.String("file", "", "Ruta absoluta al archivo de log a monitorizar")
 	port := flag.String("port", "9000", "Puerto del servidor web")
-	profile := flag.String("profile", "default", "Nombre del perfil de configuración (busca en carpeta configs/)")
-	
+	configPath := flag.String("config", "dashboard.json", "Ruta al dashboard JSON")
+
 	flag.Parse()
 
-	if *filePath == "" {
-		fmt.Println("❌ Error: Debes especificar un archivo con -file")
-		fmt.Println("👉 Ejemplo: go run main.go -file /var/log/syslog -profile syslog")
-		os.Exit(1)
+	// 1. Cargar Configuración con valores por defecto y sanitización
+	loadDashboardConfig(*configPath)
+
+	// 2. Procesar Password
+	if currentConfig.ServerPassword != "" {
+		hash := sha256.Sum256([]byte(currentConfig.ServerPassword))
+		serverPassHash = hex.EncodeToString(hash[:])
+		fmt.Println("🔒 Modo Seguro ACTIVADO (Password cargado).")
+	} else {
+		// Si no hay password en el JSON, es modo abierto
+		fmt.Println("⚠️  Modo Abierto: Sin password configurado.")
 	}
 
-	// 1. Construir la ruta al archivo JSON de configuración
-	// Busca en la carpeta ./configs/[nombre].json
-	configPath := filepath.Join("configs", *profile+".json")
-	
-	// 2. Cargar configuración
-	loadConfig(configPath)
+	// Inicializar mapa de historial
+	for i := range currentConfig.Logs {
+		hub.history[i] = make([]string, 0)
+	}
 
-	// 3. Cargar historial inicial del log
-	fmt.Printf("📂 Leyendo log: %s\n", *filePath)
-	initialLines := getLastLinesFromFile(*filePath, HISTORY_SIZE)
-	hub.history = append(hub.history, initialLines...)
-
-	// 4. Iniciar Tail (lectura en tiempo real) y Hub (distribución de mensajes)
-	go tailFile(*filePath)
+	startTailing()
 	go handleMessages()
 
-	// 5. Servidor Web
-	http.HandleFunc("/", serveHome)
-	http.HandleFunc("/ws", handleConnections)
+	http.HandleFunc("/", authMiddleware(serveHome))
+	http.HandleFunc("/ws", authMiddleware(handleConnections))
+	http.HandleFunc("/login", handleLogin)
 
-	fmt.Printf("🚀 GoTail activo en puerto %s\n", *port)
-	fmt.Printf("🎨 Perfil cargado: %s\n", configPath)
-	fmt.Printf("🌍 Web Interface: http://localhost:%s\n", *port)
-	
+	fmt.Printf("🚀 GoTail corriendo en puerto %s\n", *port)
+	fmt.Printf("🌍 http://localhost:%s\n", *port)
+
 	err := http.ListenAndServe(":"+*port, nil)
 	if err != nil {
 		log.Fatal("Error iniciando servidor: ", err)
 	}
 }
 
-func loadConfig(path string) {
+// --- LOGICA DE CARGA Y SANITIZACIÓN ---
+
+func loadDashboardConfig(path string) {
 	file, err := ioutil.ReadFile(path)
 	if err != nil {
-		fmt.Printf("⚠️  No se encontró el perfil '%s'. Usando configuración vacía.\n", path)
-		// Si falla, intentamos cargar configs/default.json por si acaso, o dejamos vacío
-		return
+		fmt.Printf("⚠️  No se encontró '%s'. Iniciando con configuración vacía.\n", path)
+		currentConfig = GlobalConfig{}
+	} else {
+		trimmed := bytes.TrimSpace(file)
+		if len(trimmed) == 0 {
+			fmt.Println("⚠️  El archivo de configuración está vacío.")
+			currentConfig = GlobalConfig{}
+		} else {
+			// Soporte para Array (legacy) o Objeto (nuevo)
+			if trimmed[0] == '[' {
+				fmt.Println("ℹ️  Formato antiguo (Array) detectado.")
+				var logs []LogEntryConfig
+				if err := json.Unmarshal(file, &logs); err != nil {
+					log.Printf("❌ Error leyendo JSON Array: %v. Iniciando vacío.", err)
+					currentConfig = GlobalConfig{}
+				} else {
+					currentConfig.Logs = logs
+				}
+			} else {
+				if err := json.Unmarshal(file, &currentConfig); err != nil {
+					log.Printf("❌ Error leyendo JSON Objeto: %v. Iniciando vacío.", err)
+					currentConfig = GlobalConfig{}
+				}
+			}
+		}
 	}
+
+	// --- APLICAR VALORES POR DEFECTO ---
+	if len(currentConfig.Logs) == 0 {
+		fmt.Println("⚠️  ADVERTENCIA: No hay logs definidos para monitorear.")
+	}
+
+	for i := range currentConfig.Logs {
+		// Usamos puntero para modificar el struct original
+		entry := &currentConfig.Logs[i]
+
+		// 1. Si falta "name", usar el nombre del archivo
+		if entry.Name == "" {
+			if entry.Path != "" {
+				entry.Name = filepath.Base(entry.Path)
+			} else {
+				entry.Name = fmt.Sprintf("Log Sin Nombre #%d", i+1)
+			}
+		}
+
+		// 2. Si falta "profile", usar "default"
+		if entry.Profile == "" {
+			entry.Profile = "default"
+		}
+
+		// Cargar perfil (si no existe, intentará cargar default)
+		if _, exists := loadedProfiles[entry.Profile]; !exists {
+			loadProfile(entry.Profile)
+		}
+	}
+
+	fmt.Printf("📋 Configuración activa: %d logs.\n", len(currentConfig.Logs))
+}
+
+func loadProfile(profileName string) {
+	path := filepath.Join("configs", profileName+".json")
+	file, err := ioutil.ReadFile(path)
 	
-	err = json.Unmarshal(file, &loadedConfig)
 	if err != nil {
-		fmt.Printf("❌ Error procesando el JSON '%s': %v\n", path, err)
+		// Si el perfil solicitado falla y no es 'default', intentamos cargar 'default'
+		if profileName != "default" {
+			fmt.Printf("⚠️  Perfil '%s' no encontrado. Intentando usar fallback 'default'.\n", profileName)
+			// Verificar si ya cargamos default antes para no leer disco otra vez
+			if defRules, ok := loadedProfiles["default"]; ok {
+				loadedProfiles[profileName] = defRules
+				return
+			}
+			// Intentar cargar default desde disco
+			loadProfile("default")
+			// Asignar lo que se haya cargado (o vacío)
+			loadedProfiles[profileName] = loadedProfiles["default"]
+			return
+		}
+		
+		// Si estamos intentando cargar 'default' y falla, reglas vacías
+		loadedProfiles[profileName] = []HighlightRule{}
 		return
 	}
-	
-	fmt.Printf("✅  Reglas cargadas: %d reglas desde %s\n", len(loadedConfig), path)
+
+	var rules []HighlightRule
+	if err := json.Unmarshal(file, &rules); err != nil {
+		fmt.Printf("❌ Error parseando perfil '%s': %v. Usando reglas vacías.\n", profileName, err)
+		loadedProfiles[profileName] = []HighlightRule{}
+		return
+	}
+	loadedProfiles[profileName] = rules
+}
+
+// --- LOGICA DEL SERVIDOR ---
+
+func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Si no hay hash de contraseña (modo abierto), pasar directo
+		if serverPassHash == "" {
+			next(w, r)
+			return
+		}
+		
+		cookie, err := r.Cookie(COOKIE_NAME)
+		if err != nil || cookie.Value != serverPassHash {
+			// Si es WebSocket, retornamos error 401, el JS manejará el cierre
+			if r.URL.Path == "/ws" {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			// Si es HTML normal, redirigir a login
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	// Si estamos en modo abierto, redirigir al home
+	if serverPassHash == "" {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	if r.Method == "GET" {
+		tmpl, _ := template.ParseFS(content, "login.html")
+		tmpl.Execute(w, LoginData{Error: false})
+		return
+	}
+	if r.Method == "POST" {
+		pass := r.FormValue("password")
+		hash := sha256.Sum256([]byte(pass))
+		hashStr := hex.EncodeToString(hash[:])
+
+		if hashStr == serverPassHash {
+			http.SetCookie(w, &http.Cookie{
+				Name:     COOKIE_NAME,
+				Value:    hashStr,
+				Path:     "/",
+				HttpOnly: true,
+				Expires:  time.Now().Add(24 * time.Hour),
+			})
+			http.Redirect(w, r, "/", http.StatusFound)
+		} else {
+			tmpl, _ := template.ParseFS(content, "login.html")
+			tmpl.Execute(w, LoginData{Error: true})
+		}
+	}
+}
+
+func startTailing() {
+	for i, entry := range currentConfig.Logs {
+		if entry.Path == "" {
+			continue // Skip logs sin path
+		}
+
+		go func(index int, path string) {
+			// 1. Leer las últimas líneas antes de empezar el tail para rellenar historial
+			initialLines := getLastLinesFromFile(path, HISTORY_SIZE)
+			hub.mutex.Lock()
+			hub.history[index] = append(hub.history[index], initialLines...)
+			hub.mutex.Unlock()
+
+			// 2. Iniciar el tailing en tiempo real
+			t, err := tail.TailFile(path, tail.Config{
+				Follow: true, ReOpen: true, Poll: true,
+				Location: &tail.SeekInfo{Offset: 0, Whence: 2},
+				Logger: tail.DiscardingLogger,
+			})
+			if err != nil {
+				fmt.Printf("❌ Error abriendo log %s: %v\n", path, err)
+				return
+			}
+			for line := range t.Lines {
+				hub.broadcast <- WebSocketMessage{LogIndex: index, Text: line.Text}
+			}
+		}(i, entry.Path)
+	}
+}
+
+func getLastLinesFromFile(filename string, n int) []string {
+	file, err := os.Open(filename)
+	if err != nil {
+		return []string{}
+	}
+	defer file.Close()
+
+	// Metodo simple: leer todo y quedarse con el final
+	scanner := bufio.NewScanner(file)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if len(lines) > n {
+		return lines[len(lines)-n:]
+	}
+	return lines
 }
 
 func serveHome(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
-	
-	// Convertir la config cargada a JSON String para inyectarla en el JS del navegador
-	configBytes, _ := json.Marshal(loadedConfig)
-	data := PageData{
-		ConfigJSON: template.JS(configBytes),
+	var frontendData []FrontendLogData
+
+	for i, entry := range currentConfig.Logs {
+		data := FrontendLogData{
+			Index: i,
+			Name:  entry.Name,
+			Rules: loadedProfiles[entry.Profile],
+		}
+		frontendData = append(frontendData, data)
 	}
+	jsonBytes, _ := json.Marshal(frontendData)
+	data := PageData{DashboardJSON: template.JS(jsonBytes)}
 
 	tmpl, err := template.ParseFS(content, "index.html")
 	if err != nil {
-		http.Error(w, "Error template", 500)
+		http.Error(w, "Template Err", 500)
 		return
 	}
 	tmpl.Execute(w, data)
@@ -136,18 +369,23 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	defer ws.Close()
 
 	hub.mutex.Lock()
-	// Enviar historial al nuevo cliente
-	for _, line := range hub.history {
-		ws.WriteMessage(websocket.TextMessage, []byte(line))
-	}
 	hub.clients[ws] = true
+	// Enviar historial completo al conectar
+	for index, lines := range hub.history {
+		for _, line := range lines {
+			msg := WebSocketMessage{LogIndex: index, Text: line}
+			jsonMsg, _ := json.Marshal(msg)
+			ws.WriteMessage(websocket.TextMessage, jsonMsg)
+		}
+	}
 	hub.mutex.Unlock()
 
-	// Mantener conexión viva
 	for {
 		if _, _, err := ws.ReadMessage(); err != nil {
 			hub.mutex.Lock()
@@ -161,41 +399,16 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 func handleMessages() {
 	for msg := range hub.broadcast {
 		hub.mutex.Lock()
-		hub.history = append(hub.history, msg)
-		if len(hub.history) > HISTORY_SIZE {
-			hub.history = hub.history[1:]
+		// Guardar en historial
+		hub.history[msg.LogIndex] = append(hub.history[msg.LogIndex], msg.Text)
+		if len(hub.history[msg.LogIndex]) > HISTORY_SIZE {
+			hub.history[msg.LogIndex] = hub.history[msg.LogIndex][1:]
 		}
+		// Enviar a clientes
+		jsonMsg, _ := json.Marshal(msg)
 		for client := range hub.clients {
-			client.WriteMessage(websocket.TextMessage, []byte(msg))
+			client.WriteMessage(websocket.TextMessage, jsonMsg)
 		}
 		hub.mutex.Unlock()
 	}
-}
-
-func tailFile(filename string) {
-	t, err := tail.TailFile(filename, tail.Config{
-		Follow: true, ReOpen: true, Poll: true,
-		Location: &tail.SeekInfo{Offset: 0, Whence: 2},
-	})
-	if err != nil { log.Fatal(err) }
-	for line := range t.Lines {
-		hub.broadcast <- line.Text
-	}
-}
-
-func getLastLinesFromFile(filename string, n int) []string {
-	file, err := os.Open(filename)
-	if err != nil { return []string{} }
-	defer file.Close()
-	
-	// Método simplificado para leer líneas
-	scanner := bufio.NewScanner(file)
-	var lines []string
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	if len(lines) > n {
-		return lines[len(lines)-n:]
-	}
-	return lines
 }

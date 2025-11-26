@@ -1,0 +1,35 @@
+[
+  { 
+    "keyword": "#", 
+    "color": "#f1fa8c", 
+    "dot": "amber", 
+    "use_regex": false, 
+    "label": "Warning (#)", 
+    "blink": false 
+  },
+  { 
+    "keyword": "Ready to accept", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": false, 
+    "label": "Ready", 
+    "blink": false 
+  },
+  { 
+    "keyword": "Background saving terminated with success", 
+    "color": "#8be9fd", 
+    "dot": "blue", 
+    "use_regex": false, 
+    "label": "Saved", 
+    "blink": false 
+  },
+  { 
+    "keyword": "fail|error", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": true, 
+    "label": "Redis Fail", 
+    "blink": true 
+  }
+]
+

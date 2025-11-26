@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>GoTail Access</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #f8f8f2;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: #282a36;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            text-align: center;
+            width: 300px;
+            border: 1px solid #444;
+            animation: fade-in 0.5s ease-out;
+        }
+
+        h1 { margin: 0 0 20px; color: #50fa7b; font-size: 24px; letter-spacing: 1px; }
+        p { color: #bd93f9; font-size: 12px; margin-bottom: 25px; opacity: 0.8; }
+
+        input[type="password"] {
+            background: #44475a;
+            border: 1px solid #6272a4;
+            color: white;
+            padding: 12px;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+            font-family: inherit;
+            margin-bottom: 20px;
+            font-size: 16px;
+            outline: none;
+            transition: border 0.2s;
+            text-align: center;
+        }
+
+        input:focus { border-color: #bd93f9; box-shadow: 0 0 5px rgba(189, 147, 249, 0.5); }
+
+        button {
+            background: #6272a4;
+            color: white;
+            border: none;
+            padding: 12px;
+            width: 100%;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover { background: #50fa7b; color: #282a36; }
+        button:active { transform: scale(0.98); }
+
+        .error-msg {
+            color: #ff5555; font-size: 12px; margin-top: 15px; display: none;
+        }
+
+        @keyframes fade-in { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+        
+        .shake { animation: shake 0.3s; border-color: #ff5555 !important; }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <h1>GoTail</h1>
+        <p>TERMINAL ACCESS REQUIRED</p>
+        
+        <form action="/login" method="POST">
+            <input type="password" name="password" placeholder="Password..." autofocus required>
+            <button type="submit">UNLOCK</button>
+        </form>
+
+        <!-- Go inyectará este bloque si hay error -->
+        {{if .Error}}
+        <div class="error-msg" style="display:block">Acceso Denegado</div>
+        <script>
+            document.querySelector('input').classList.add('shake');
+        </script>
+        {{end}}
+    </div>
+
+</body>
+</html>

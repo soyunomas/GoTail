@@ -1,0 +1,34 @@
+[
+  { 
+    "keyword": "ERROR", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": false, 
+    "label": "PHP Error", 
+    "blink": true 
+  },
+  { 
+    "keyword": "WARNING", 
+    "color": "#f1fa8c", 
+    "dot": "amber", 
+    "use_regex": false, 
+    "label": "Warning", 
+    "blink": false 
+  },
+  { 
+    "keyword": "NOTICE", 
+    "color": "#8be9fd", 
+    "dot": "blue", 
+    "use_regex": false, 
+    "label": "Notice", 
+    "blink": false 
+  },
+  { 
+    "keyword": "exited on signal", 
+    "color": "#ffb86c", 
+    "dot": "purple", 
+    "use_regex": false, 
+    "label": "Child Crash", 
+    "blink": false 
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "server_password": "pass",
+  "logs": [
+  {
+    "path": "/var/log/syslog",
+    "profile": "syslog",
+    "name": "Sistema (Syslog)"
+  },
+  {
+    "path": "/var/log/auth.log",
+    "profile": "auth",
+    "name": "Seguridad (Auth)"
+  },
+  {
+    "path": "/var/log/apache2/error.log",
+    "profile": "apache2",
+    "name": "Servidor Web"
+  },
+  {
+    "path": "/var/log/dmesg",
+    "profile": "dmesg",
+    "name": "Kernel"
+  },
+  {
+    "path": "/var/log/ufw.log.1",
+    "profile": "ufw",
+    "name": "Firewall"
+  }
+]
+}

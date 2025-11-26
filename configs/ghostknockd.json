@@ -1,0 +1,32 @@
+[
+  {
+    "keyword": "level=ERROR|falló",
+    "color": "#ff5555",
+    "dot": "red",
+    "use_regex": true
+  },
+  {
+    "keyword": "source_ip=127\\.0\\.0\\.1",
+    "color": "#50fa7b",
+    "dot": "green",
+    "use_regex": true
+  },
+  {
+    "keyword": "remaining_seconds=\\d+\\.\\d+", 
+    "color": "#ffb86c",
+    "dot": "amber",
+    "use_regex": true
+  },
+  {
+    "keyword": "Ghos.*Knockd",
+    "color": "#bd93f9",
+    "dot": "purple",
+    "use_regex": true
+  },
+  {
+    "keyword": "level=DEBUG",
+    "color": "#6272a4",
+    "dot": "none",
+    "use_regex": false
+  }
+]
