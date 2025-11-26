@@ -1,0 +1,218 @@
+{{define "scripts_core"}}
+<script>
+    // --- 1. CONSTRUCCIÓN DEL DASHBOARD ---
+
+    if (dashboardData.length === 0) {
+        gridContainer.innerHTML = "<div style='padding:20px; color:#aaa'>No hay logs configurados en dashboard.json</div>";
+    }
+
+    dashboardData.forEach(logConfig => {
+        // Procesar Reglas
+        const rawRules = logConfig.rules || [];
+        const rules = rawRules.map((rule, idx) => {
+            const label = rule.label || rule.keyword.substring(0, 15) || `Regla ${idx+1}`;
+            let regexObj = null;
+            if (rule.use_regex) {
+                try { regexObj = new RegExp(rule.keyword, 'i'); } catch(e){}
+            }
+            return { ...rule, regexObj, label, id: idx, alert_msg: rule.alert_msg };
+        });
+
+        // Crear Elemento DOM
+        const panelDiv = document.createElement('div');
+        panelDiv.className = 'log-panel';
+        panelDiv.id = `panel-wrapper-${logConfig.index}`;
+        
+        let filtersHtml = '';
+        let cssRules = "";
+        
+        // CSS Dinámico para filtros
+        rules.forEach(rule => {
+            cssRules += `#log-${logConfig.index}.hide-rule-${rule.id} .rule-${rule.id} { display: none !important; } \n`;
+            filtersHtml += `
+                <div class="chip active" 
+                     style="color: ${rule.color || '#fff'}" 
+                     onclick="toggleFilter(${logConfig.index}, 'rule-${rule.id}', this)"
+                     title="${rule.keyword}">
+                    <span class="chip-dot" style="background:${rule.color||'#888'}"></span>
+                    ${rule.label}
+                </div>`;
+        });
+        dynamicStyleSheet.textContent += cssRules;
+
+        // Regla Default
+        cssRules += `#log-${logConfig.index}.hide-rule-default .rule-default { display: none !important; } \n`;
+        dynamicStyleSheet.textContent += cssRules;
+        filtersHtml += `
+            <div class="chip active" style="color: #bbb" 
+                 onclick="toggleFilter(${logConfig.index}, 'rule-default', this)">
+                <span class="chip-dot" style="background:#666"></span> Otros
+            </div>`;
+
+        // HTML del Panel
+        panelDiv.innerHTML = `
+            <div class="panel-header">
+                <span>${logConfig.name}</span>
+                <div style="display:flex; align-items:center">
+                    <span class="header-btn" id="pause-btn-${logConfig.index}" onclick="togglePanelPause(${logConfig.index}, this)" title="Pausar este log">
+                        ${ICON_PAUSE}
+                    </span>
+                    <span class="header-btn" onclick="exportLogs(${logConfig.index})" title="Exportar Logs">
+                        ${ICON_DOWNLOAD}
+                    </span>
+                    <div style="width:1px; height:14px; background:#444; margin:0 8px;"></div>
+                    <span class="header-btn" onclick="toggleFullscreen(${logConfig.index}, this)" title="Pantalla Completa">
+                        ${ICON_EXPAND}
+                    </span>
+                    <span class="header-btn close-btn" onclick="removePanel(${logConfig.index})" title="Cerrar Panel">
+                        ${ICON_CLOSE}
+                    </span>
+                </div>
+            </div>
+            <div class="filter-bar">${filtersHtml}</div>
+            <div style="position:relative; flex-grow:1; overflow:hidden; display:flex;">
+                <div class="panel-content" id="log-${logConfig.index}"></div>
+                <div class="new-logs-btn" id="notify-${logConfig.index}" onclick="manualScrollToBottom(${logConfig.index})">
+                    ⬇ Nuevos Logs
+                </div>
+            </div>
+        `;
+        gridContainer.appendChild(panelDiv);
+
+        const container = panelDiv.querySelector('.panel-content');
+        const notifyBtn = panelDiv.querySelector('.new-logs-btn');
+
+        // Detector de scroll para mostrar botón "Nuevos Logs"
+        container.addEventListener('scroll', () => {
+            const isAtBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 20;
+            if (isAtBottom) {
+                notifyBtn.classList.remove('visible');
+            }
+        });
+
+        // Guardar referencia en variable global 'panels'
+        panels[logConfig.index] = { 
+            container: container, 
+            rules: rules,
+            notifyBtn: notifyBtn,
+            isPaused: false,
+            backlog: [],
+            name: logConfig.name
+        };
+    });
+
+    // --- 2. WEBSOCKET CONNECTION ---
+
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+
+    ws.onopen = () => statusSpan.innerHTML = "🟢 <span style='color:#50fa7b'>Conectado</span>";
+    ws.onclose = () => statusSpan.innerHTML = "🔴 Desconectado";
+
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            appendLogLine(msg.log_index, msg.text);
+        } catch (e) {}
+    };
+
+    // --- 3. CORE RENDERING FUNCTION ---
+
+    window.appendLogLine = function(index, text, forceRender = false, targetFragment = null) {
+        const panel = panels[index];
+        if (!panel) return;
+
+        // Procesar Reglas (Matching)
+        let matchedRule = null;
+        let ruleClass = 'rule-default';
+
+        for (const rule of panel.rules) {
+            let match = false;
+            if (rule.use_regex && rule.regexObj) match = rule.regexObj.test(text);
+            else match = text.includes(rule.keyword);
+
+            if (match) {
+                matchedRule = rule;
+                ruleClass = `rule-${rule.id}`;
+                break;
+            }
+        }
+
+        // ⚡⚡⚡ CHECK NUCLEAR ALERT ⚡⚡⚡
+        // IMPORTANTE: Si areAlertsMuted es true, NO entramos aquí.
+        if (matchedRule && matchedRule.alert_msg && !forceRender && !areAlertsMuted) {
+            triggerNuclearAlert(matchedRule.alert_msg, matchedRule.color);
+        }
+        // ------------------------------------
+
+        // Gestión de Buffer y Pausa
+        if (!forceRender && (isGlobalPaused || panel.isPaused)) {
+            panel.backlog.push(text);
+            if (panel.backlog.length > 2000) panel.backlog.shift();
+            return;
+        }
+
+        const container = panel.container;
+        const wasAtBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 50;
+        const isInitializing = container.childElementCount < 60; // Para no disparar scroll al cargar historial
+
+        // Crear DOM Elements
+        const div = document.createElement('div');
+        let extraClasses = ' new-entry'; 
+        if (matchedRule && matchedRule.blink) {
+            extraClasses += ' blink-bg';
+        }
+
+        div.className = `log-line ${ruleClass}${extraClasses}`;
+        
+        let appliedColor = matchedRule ? matchedRule.color : '';
+        let appliedDot = matchedRule ? matchedRule.dot : 'none';
+
+        if (appliedDot !== 'none') {
+            const dot = document.createElement('span');
+            dot.className = `dot ${appliedDot}`;
+            div.appendChild(dot);
+        }
+        
+        const textSpan = document.createElement('span');
+        textSpan.textContent = text;
+        if (appliedColor) textSpan.style.color = appliedColor;
+        div.appendChild(textSpan);
+
+        const ghostBtn = document.createElement('span');
+        ghostBtn.className = 'copy-ghost-btn';
+        ghostBtn.innerHTML = ICON_CLIPBOARD;
+        div.appendChild(ghostBtn);
+
+        // Filtro Global de Texto
+        if (globalFilterText && !text.toLowerCase().includes(globalFilterText)) {
+            div.classList.add('hidden');
+        }
+
+        // Inserción en el DOM
+        if (targetFragment) {
+            targetFragment.appendChild(div);
+        } else {
+            container.appendChild(div);
+            
+            // Limpieza de buffer visual (DOM)
+            if (container.childElementCount > MAX_BUFFER_SIZE) {
+                const removedLine = container.firstElementChild;
+                if(selectedLinesSet.has(removedLine)) {
+                    selectedLinesSet.delete(removedLine);
+                    updateMultiCopyBtn();
+                }
+                container.removeChild(removedLine);
+            }
+
+            // Scroll Inteligente
+            if (isInitializing || wasAtBottom) {
+                container.scrollTop = container.scrollHeight;
+                panel.notifyBtn.classList.remove('visible'); 
+            } else {
+                panel.notifyBtn.classList.add('visible');
+            }
+        }
+    }
+</script>
+{{end}}

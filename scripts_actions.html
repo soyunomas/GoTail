@@ -1,0 +1,284 @@
+{{define "scripts_actions"}}
+<script>
+    // --- EVENT LISTENERS GLOBALES ---
+    
+    // Doble click para copiar línea
+    document.addEventListener('dblclick', (e) => {
+        const line = e.target.closest('.log-line');
+        if (line) {
+            if(e.target.closest('.copy-ghost-btn')) return;
+            copyLineText(line);
+            clearSelection();
+        }
+    });
+
+    // Clicks para selección múltiple y botones ghost
+    document.addEventListener('click', (e) => {
+        // Click en botón fantasma de copiar
+        if (e.target.closest('.copy-ghost-btn')) {
+            e.stopPropagation(); 
+            const line = e.target.closest('.log-line');
+            copyLineText(line);
+            return;
+        }
+
+        const line = e.target.closest('.log-line');
+        if (!line) return;
+
+        const isDot = e.target.classList.contains('dot');
+        const isModifier = e.altKey || e.ctrlKey || e.metaKey;
+        const isShift = e.shiftKey;
+
+        // Selección múltiple (Ctrl/Shift)
+        if (isDot || isModifier || isShift) {
+            if(isDot) e.preventDefault(); 
+            if (isShift && lastSelectedLine && lastSelectedLine.parentNode === line.parentNode) {
+                handleRangeSelection(lastSelectedLine, line);
+            } else {
+                toggleLineSelection(line);
+            }
+            lastSelectedLine = line;
+            updateMultiCopyBtn();
+        }
+    });
+
+    // Tecla Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (nuclearOverlay.classList.contains('visible')) {
+                dismissNuclear();
+                return;
+            }
+            clearSelection();
+            document.querySelectorAll('.log-panel.fullscreen').forEach(panel => {
+                const btn = panel.querySelector('.header-btn[onclick^="toggleFullscreen"]');
+                if (btn) btn.click();
+            });
+        }
+    });
+
+    // Buscador Global
+    document.getElementById('search').addEventListener('keyup', (e) => {
+        globalFilterText = e.target.value.toLowerCase();
+        document.querySelectorAll('.log-line').forEach(line => {
+            if (line.textContent.toLowerCase().includes(globalFilterText)) line.classList.remove('hidden');
+            else line.classList.add('hidden');
+        });
+    });
+
+    // --- FUNCIONES DE UTILIDAD UI ---
+
+    function copyLineText(line) {
+        const clone = line.cloneNode(true);
+        const ghosts = clone.querySelectorAll('.copy-ghost-btn');
+        ghosts.forEach(g => g.remove());
+        const text = clone.innerText;
+        copyToClipboard(text);
+        flashLine(line);
+    }
+
+    function toggleLineSelection(line) {
+        if (selectedLinesSet.has(line)) {
+            selectedLinesSet.delete(line);
+            line.classList.remove('selected');
+        } else {
+            selectedLinesSet.add(line);
+            line.classList.add('selected');
+        }
+    }
+
+    function handleRangeSelection(startLine, endLine) {
+        const container = startLine.parentNode;
+        const children = Array.from(container.children);
+        const idx1 = children.indexOf(startLine);
+        const idx2 = children.indexOf(endLine);
+        if (idx1 === -1 || idx2 === -1) return;
+        const start = Math.min(idx1, idx2);
+        const end = Math.max(idx1, idx2);
+        for (let i = start; i <= end; i++) {
+            const el = children[i];
+            if (el.classList.contains('log-line')) {
+                selectedLinesSet.add(el);
+                el.classList.add('selected');
+            }
+        }
+    }
+
+    function clearSelection() {
+        selectedLinesSet.forEach(line => line.classList.remove('selected'));
+        selectedLinesSet.clear();
+        lastSelectedLine = null;
+        updateMultiCopyBtn();
+    }
+
+    function updateMultiCopyBtn() {
+        const btn = document.getElementById('multi-copy-btn');
+        const countSpan = document.getElementById('selected-count');
+        const count = selectedLinesSet.size;
+        if (count > 0) {
+            countSpan.innerText = count;
+            btn.classList.add('visible');
+        } else {
+            btn.classList.remove('visible');
+        }
+    }
+
+    window.copySelectedLines = function() {
+        let textToCopy = [];
+        document.querySelectorAll('.log-line.selected').forEach(line => {
+            const clone = line.cloneNode(true);
+            clone.querySelectorAll('.copy-ghost-btn').forEach(g => g.remove());
+            textToCopy.push(clone.innerText);
+        });
+        if (textToCopy.length > 0) {
+            copyToClipboard(textToCopy.join('\n'));
+            clearSelection();
+        }
+    };
+
+    function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text);
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+    }
+
+    function flashLine(line) {
+        line.style.transition = 'none';
+        const prevBg = line.style.backgroundColor;
+        line.style.backgroundColor = '#50fa7b44'; 
+        setTimeout(() => {
+            line.style.transition = 'background-color 0.5s';
+            line.style.backgroundColor = '';
+        }, 50);
+    }
+
+    // --- CONTROLES DE PANELES ---
+
+    window.exportLogs = function(index) {
+        const panel = panels[index];
+        if (!panel) return;
+        let contentLines = [];
+        panel.container.querySelectorAll('.log-line').forEach(line => {
+            const clone = line.cloneNode(true);
+            clone.querySelectorAll('.copy-ghost-btn').forEach(g => g.remove());
+            contentLines.push(clone.innerText.trimEnd());
+        });
+        if (panel.backlog.length > 0) {
+            contentLines = contentLines.concat(panel.backlog);
+        }
+        if (contentLines.length === 0) {
+            alert("No hay logs para exportar.");
+            return;
+        }
+        const blob = new Blob([contentLines.join('\n')], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0,10);
+        const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '-');
+        const safeName = panel.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safeName}_${dateStr}_${timeStr}.log`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    window.togglePanelPause = function(index, btn) {
+        const panel = panels[index];
+        if (!panel) return;
+        panel.isPaused = !panel.isPaused;
+        if (panel.isPaused) {
+            btn.innerHTML = ICON_PLAY; 
+            btn.classList.add('pause-active');
+            btn.title = "Reanudar (Logs acumulados en buffer)";
+        } else {
+            btn.innerHTML = ICON_PAUSE;
+            btn.classList.remove('pause-active');
+            btn.title = "Pausar este log";
+            if (panel.backlog.length > 0) {
+                const fragment = document.createDocumentFragment();
+                // appendLogLine está en scripts_core, pero es global por estar en window
+                panel.backlog.forEach(text => { appendLogLine(index, text, true, fragment); });
+                panel.container.appendChild(fragment);
+                panel.backlog = [];
+                panel.container.scrollTop = panel.container.scrollHeight;
+                panel.notifyBtn.classList.remove('visible');
+            }
+        }
+    };
+
+    window.toggleFullscreen = function(index, btn) {
+        const panel = document.getElementById(`panel-wrapper-${index}`);
+        panel.classList.toggle('fullscreen');
+        const isFull = panel.classList.contains('fullscreen');
+        btn.innerHTML = isFull ? ICON_COLLAPSE : ICON_EXPAND;
+        btn.title = isFull ? 'Salir' : 'Pantalla Completa';
+    };
+
+    window.removePanel = function(index) {
+        const panelEl = document.getElementById(`panel-wrapper-${index}`);
+        if (panelEl) panelEl.remove();
+        delete panels[index];
+    };
+
+    window.manualScrollToBottom = function(index) {
+        const panel = panels[index];
+        if(panel) {
+            panel.container.scrollTop = panel.container.scrollHeight;
+            panel.notifyBtn.classList.remove('visible');
+        }
+    }
+
+    window.toggleFilter = function(panelIndex, ruleClass, chipElement) {
+        const panel = panels[panelIndex];
+        if (!panel) return;
+        const isActive = chipElement.classList.contains('active');
+        if (isActive) {
+            chipElement.classList.remove('active'); chipElement.classList.add('inactive');
+            panel.container.classList.add(`hide-${ruleClass}`);
+        } else {
+            chipElement.classList.add('active'); chipElement.classList.remove('inactive');
+            panel.container.classList.remove(`hide-${ruleClass}`);
+        }
+    };
+
+    // --- CONTROLES GLOBALES ---
+
+    window.toggleGlobalPause = function() {
+        isGlobalPaused = !isGlobalPaused;
+        pauseBtn.classList.toggle('paused', isGlobalPaused);
+        pauseBtn.textContent = isGlobalPaused ? "REANUDAR TODO" : "PAUSA GLOBAL";
+        
+        if (!isGlobalPaused) {
+            Object.keys(panels).forEach(idx => {
+                const panel = panels[idx];
+                if (!panel.isPaused && panel.backlog.length > 0) {
+                    const fragment = document.createDocumentFragment();
+                    panel.backlog.forEach(txt => appendLogLine(idx, txt, true, fragment));
+                    panel.container.appendChild(fragment);
+                    panel.backlog = [];
+                    panel.container.scrollTop = panel.container.scrollHeight;
+                }
+            });
+        }
+    };
+
+    window.clearAll = function() {
+        clearSelection();
+        Object.values(panels).forEach(p => {
+            p.container.innerHTML = '';
+            p.backlog = [];
+            p.notifyBtn.classList.remove('visible');
+        });
+    };
+</script>
+{{end}}

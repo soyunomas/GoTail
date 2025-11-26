@@ -22,7 +22,8 @@ import (
 	"github.com/nxadm/tail"
 )
 
-//go:embed index.html login.html
+// Incluimos TODOS los archivos HTML nuevos
+//go:embed index.html login.html styles.html scripts_globals.html scripts_alerts.html scripts_actions.html scripts_core.html
 var content embed.FS
 
 // --- ESTRUCTURAS DE CONFIGURACIÓN ---
@@ -45,7 +46,7 @@ type HighlightRule struct {
 	UseRegex bool   `json:"use_regex"`
 	Label    string `json:"label,omitempty"`
 	Blink    bool   `json:"blink,omitempty"`
-    AlertMsg string `json:"alert_msg,omitempty"`
+	AlertMsg string `json:"alert_msg,omitempty"`
 }
 
 type FrontendLogData struct {
@@ -206,7 +207,7 @@ func loadDashboardConfig(path string) {
 func loadProfile(profileName string) {
 	path := filepath.Join("configs", profileName+".json")
 	file, err := ioutil.ReadFile(path)
-	
+
 	if err != nil {
 		// Si el perfil solicitado falla y no es 'default', intentamos cargar 'default'
 		if profileName != "default" {
@@ -222,7 +223,7 @@ func loadProfile(profileName string) {
 			loadedProfiles[profileName] = loadedProfiles["default"]
 			return
 		}
-		
+
 		// Si estamos intentando cargar 'default' y falla, reglas vacías
 		loadedProfiles[profileName] = []HighlightRule{}
 		return
@@ -246,7 +247,7 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		
+
 		cookie, err := r.Cookie(COOKIE_NAME)
 		if err != nil || cookie.Value != serverPassHash {
 			// Si es WebSocket, retornamos error 401, el JS manejará el cierre
@@ -359,9 +360,17 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 	jsonBytes, _ := json.Marshal(frontendData)
 	data := PageData{DashboardJSON: template.JS(jsonBytes)}
 
-	tmpl, err := template.ParseFS(content, "index.html")
+	// --- CARGAMOS TODOS LOS FRAGMENTOS ---
+	tmpl, err := template.ParseFS(content,
+		"index.html",
+		"styles.html",
+		"scripts_globals.html",
+		"scripts_alerts.html",
+		"scripts_actions.html",
+		"scripts_core.html",
+	)
 	if err != nil {
-		http.Error(w, "Template Err", 500)
+		http.Error(w, "Error cargando templates HTML: "+err.Error(), 500)
 		return
 	}
 	tmpl.Execute(w, data)

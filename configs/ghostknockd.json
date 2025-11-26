@@ -1,32 +1,65 @@
 [
   {
-    "keyword": "level=ERROR|falló",
+    "keyword": "Replay Attack detectado",
     "color": "#ff5555",
     "dot": "red",
-    "use_regex": true
+    "blink": true,
+    "alert_msg": "🚨 ALERTA DE SEGURIDAD: ATAQUE DE REPETICIÓN DETECTADO 🚨",
+    "label": "💀 REPLAY ATTACK"
   },
   {
-    "keyword": "source_ip=127\\.0\\.0\\.1",
+    "keyword": "invalid_signature_or_decryption_failed",
+    "color": "#ff5555",
+    "dot": "red",
+    "blink": true,
+    "label": "⛔ Firma/Cifrado Inválido"
+  },
+  {
+    "keyword": "Knock válido recibido y autorizado",
     "color": "#50fa7b",
     "dot": "green",
-    "use_regex": true
+    "label": "✅ ACCESO CONCEDIDO"
   },
   {
-    "keyword": "remaining_seconds=\\d+\\.\\d+", 
+    "keyword": "Ejecutando comando en el shell",
+    "color": "#8be9fd",
+    "dot": "blue",
+    "label": "🚀 Ejecutando Script"
+  },
+  {
+    "keyword": "rate_limit_exceeded",
     "color": "#ffb86c",
     "dot": "amber",
-    "use_regex": true
+    "label": "✋ Rate Limit (DoS)"
   },
   {
-    "keyword": "Ghos.*Knockd",
-    "color": "#bd93f9",
+    "keyword": "unauthorized_action",
+    "color": "#ff79c6",
     "dot": "purple",
-    "use_regex": true
+    "label": "🚫 Acción Prohibida"
   },
   {
-    "keyword": "level=DEBUG",
+    "keyword": "unauthorized_source_ip",
+    "color": "#ff79c6",
+    "dot": "purple",
+    "label": "🚫 IP No Permitida"
+  },
+  {
+    "keyword": "cooldown_active",
+    "color": "#f1fa8c",
+    "dot": "amber",
+    "label": "⏳ Enfriamiento"
+  },
+  {
+    "keyword": "Falló la ejecución",
+    "color": "#ff5555",
+    "dot": "red",
+    "label": "💥 Error Script"
+  },
+  {
+    "keyword": "outside_replay_window",
     "color": "#6272a4",
     "dot": "none",
-    "use_regex": false
+    "label": "⏰ Timestamp Viejo"
   }
 ]

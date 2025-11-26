@@ -1,0 +1,34 @@
+[
+  { 
+    "keyword": "\\[error\\]| 50[0-9] ", 
+    "color": "#ff5555", 
+    "dot": "red", 
+    "use_regex": true, 
+    "label": "Error Crítico", 
+    "blink": true 
+  },
+  { 
+    "keyword": "\\[warn\\]| 40[0-9] ", 
+    "color": "#f1fa8c", 
+    "dot": "amber", 
+    "use_regex": true, 
+    "label": "Warning/404", 
+    "blink": false 
+  },
+  { 
+    "keyword": " 200 ", 
+    "color": "#50fa7b", 
+    "dot": "green", 
+    "use_regex": false, 
+    "label": "Success (200)", 
+    "blink": false 
+  },
+  { 
+    "keyword": "(GET|POST|PUT|DELETE|HEAD)", 
+    "color": "#8be9fd", 
+    "dot": "blue", 
+    "use_regex": true, 
+    "label": "Method", 
+    "blink": false 
+  }
+]

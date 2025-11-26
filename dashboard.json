@@ -17,12 +17,12 @@
     "name": "Servidor Web"
   },
   {
-    "path": "/var/log/dmesg",
-    "profile": "dmesg",
-    "name": "Kernel"
+    "path": "/var/log/ghostknockd.log",
+    "profile": "ghostknockd",
+    "name": "GhostKnockd"
   },
   {
-    "path": "/var/log/ufw.log.1",
+    "path": "/var/log/ufw.log",
     "profile": "ufw",
     "name": "Firewall"
   }

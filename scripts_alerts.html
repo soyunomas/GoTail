@@ -1,0 +1,51 @@
+{{define "scripts_alerts"}}
+<script>
+    // ELEMENTOS NUCLEAR ALERT
+    const nuclearOverlay = document.getElementById('nuclear-alert');
+    const nuclearBox = document.getElementById('nuclear-box');
+    const nuclearTitle = document.getElementById('nuclear-title');
+    const nuclearMsg = document.getElementById('nuclear-msg');
+
+    // --- LÓGICA DE ALERTAS ---
+    window.triggerNuclearAlert = function(msg, color) {
+        // SI ESTÁ SILENCIADO, IGNORAR ALERTA
+        if (areAlertsMuted) return;
+
+        nuclearMsg.innerText = msg;
+        const alertColor = color || '#ff5555';
+        
+        // Cambiar color dinámicamente
+        nuclearBox.style.borderColor = alertColor;
+        nuclearBox.style.color = alertColor;
+        nuclearBox.style.boxShadow = `0 0 50px ${alertColor}80, inset 0 0 20px ${alertColor}40`;
+        const btn = nuclearBox.querySelector('.nuclear-btn'); // Botón Entendido
+        btn.style.background = alertColor;
+        
+        // Mostrar
+        nuclearOverlay.classList.add('visible');
+    };
+
+    window.dismissNuclear = function() {
+        nuclearOverlay.classList.remove('visible');
+    };
+
+    window.dismissAndMuteNuclear = function() {
+        dismissNuclear();
+        // Si no estaba muteado, lo muteamos
+        if (!areAlertsMuted) {
+            toggleAlertsMute();
+        }
+    };
+
+    window.toggleAlertsMute = function() {
+        areAlertsMuted = !areAlertsMuted;
+        if (areAlertsMuted) {
+            alertsBtn.classList.add('muted');
+            alertsBtn.innerText = "🔕 SILENCIADAS";
+        } else {
+            alertsBtn.classList.remove('muted');
+            alertsBtn.innerText = "🔔 ALERTAS: ON";
+        }
+    };
+</script>
+{{end}}
